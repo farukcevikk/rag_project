@@ -1,0 +1,23 @@
+# Confidential local manuals and derived retrieval indexes
+data/
+data/user_manuel_dev.md
+data/user_manuel_dev.pdf
+data/ui-user-guide.md
+app/chroma_db/
+*.pkl
+*.onnx
+
+# Private evaluation and runtime output
+evaluation/
+log/
+jetson_env/
+*.jsonl
+*.xlsx
+*.csv
+*.png
+*.svg
+*.pdf
+
+# Local Python/runtime artifacts
+__pycache__/
+*.py[cod]
