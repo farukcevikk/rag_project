@@ -84,7 +84,7 @@ logging.basicConfig(
 # UI
 # =====================================================
 
-st.title("Toyota User Manual Asistanı (RAG)")
+st.title("1pavi Copilot")
 
 # =====================================================
 # SESSION
@@ -119,9 +119,11 @@ for i, msg in enumerate(st.session_state.messages):
                 st.write(f"**Query Language:** {debug.get('query_language')}")
                 if debug.get("evidence_query") != debug.get("standalone_question"):
                     st.write(f"**Evidence Query:** {debug.get('evidence_query')}")
-                st.write(f"**Distance:** {debug.get('best_distance')}")
+                st.write(f"**Evidence Score:** {debug.get('best_reranker_score')}")
                 st.write(f"**Threshold:** {debug.get('threshold')}")
-                st.write(f"**Evidence Gate:** {debug.get('context_reliability_reason')}")
+                st.write(f"**Generation Gate:** {debug.get('context_reliability_reason')}")
+                st.write(f"**Gate Type:** {debug.get('gate_type')}")
+                st.write(f"**Evidence Sufficiency:** {debug.get('evidence_sufficiency')}")
                 st.write(f"**Reranker Margin:** {debug.get('reranker_score_margin')}")
                 st.write(
                     f"**Distinctive Term Hits:** {debug.get('distinctive_term_hits')}"
@@ -130,25 +132,16 @@ for i, msg in enumerate(st.session_state.messages):
                 st.write(f"**Retrieval Consensus:** {debug.get('retrieval_consensus')}")
                 st.write(f"**Consensus Support Rank:** {debug.get('consensus_support_rank')}")
                 st.write(f"**Context Documents:** {debug.get('retrieved_document_count')}")
-                if debug.get("section_expansion_used"):
-                    st.write("**Section Expansion:** True")
-                st.write(
-                    f"**Language Preference:** "
-                    f"{debug.get('language_preference_used', False)}"
-                )
-                st.write(
-                    f"**Evidence Compression:** "
-                    f"{debug.get('evidence_compression_used', False)}"
-                )
-                st.write(f"**Diversity Supplement:** {debug.get('diversity_supplement_used')}")
-                st.write(f"**Dense Anchor Promoted:** {debug.get('dense_anchor_promoted')}")
                 violations = debug.get("unsupported_technical_terms", [])
                 if violations:
                     st.warning(f"Unsupported Technical Terms: {violations}")
                 st.write(f"**Rewrite:** {debug.get('rewrite_time')} sn")
                 st.write(f"**Retrieval:** {debug.get('retrieval_time')} sn")
                 st.write(f"**Rerank:** {debug.get('rerank_time')} sn")
+                st.write(f"**TTFT (ilk görünür token):** {debug.get('time_to_first_token')} sn")
                 st.write(f"**Generation:** {debug.get('generation_time')} sn")
+                st.write(f"**Finish Reason:** {debug.get('finish_reason') or 'unknown'}")
+                st.write(f"**Truncated:** {debug.get('truncated', False)}")
                 st.write(f"**Total:** {debug.get('total_time')} sn")
                 st.write("**Başlıklar:**")
                 st.write(debug.get("retrieved_sections", []))
@@ -197,20 +190,26 @@ if user_input:
 
     with st.chat_message("assistant"):
         response_placeholder = st.empty()
+        status_placeholder = st.empty()
+        status_placeholder.info("Kaynaklar aranıyor...")
         last_render = [0.0]
+        stream_started = [False]
 
         def render_stream(partial_text):
+            if not stream_started[0]:
+                stream_started[0] = True
+                status_placeholder.empty()
             now = time.monotonic()
             if now - last_render[0] >= 0.04:
                 response_placeholder.markdown(partial_text + "▌")
                 last_render[0] = now
 
-        with st.spinner("Kaynaklar aranıyor..."):
-            result = rag_pipeline.answer_question(
-                user_input=user_input,
-                history_messages=st.session_state.messages[:-1],
-                stream_callback=render_stream,
-            )
+        result = rag_pipeline.answer_question(
+            user_input=user_input,
+            history_messages=st.session_state.messages[:-1],
+            stream_callback=render_stream,
+        )
+        status_placeholder.empty()
 
     # ---------------------------------------------------------
     # DEĞİŞİKLİK: GELEN CEVABI XML ETİKETLERİNDEN AYIKLIYORUZ
@@ -238,12 +237,14 @@ if user_input:
         "search_query": result["search_query"],
         "standalone_question": result.get("standalone_question", result["search_query"]),
         "evidence_query": result.get("evidence_query", result["search_query"]),
-        "section_expansion_used": result.get("section_expansion_used", False),
         "query_language": result.get("query_language"),
-        "language_preference_used": result.get("language_preference_used", False),
-        "evidence_compression_used": result.get("evidence_compression_used", False),
         "best_distance": result.get("best_distance", "N/A"),
+        "best_reranker_score": result.get(
+            "best_reranker_score", result.get("best_distance", "N/A")
+        ),
         "threshold": result.get("threshold", "N/A"),
+        "gate_type": result.get("gate_type"),
+        "evidence_sufficiency": result.get("evidence_sufficiency"),
         "context_reliability_reason": result.get("context_reliability_reason", "N/A"),
         "context_is_reliable": result.get("context_is_reliable", False),
         "reranker_score_margin": result.get("reranker_score_margin"),
@@ -253,13 +254,14 @@ if user_input:
         "retrieval_consensus": result.get("retrieval_consensus", False),
         "consensus_support_rank": result.get("consensus_support_rank"),
         "retrieved_document_count": result.get("retrieved_document_count", 0),
-        "diversity_supplement_used": result.get("diversity_supplement_used", False),
-        "dense_anchor_promoted": result.get("dense_anchor_promoted", False),
         "unsupported_technical_terms": result.get("unsupported_technical_terms", []),
         "rewrite_time": result["rewrite_time"],
         "retrieval_time": result["retrieval_time"],
         "rerank_time": result["rerank_time"],
+        "time_to_first_token": result.get("time_to_first_token"),
         "generation_time": result["generation_time"],
+        "finish_reason": result.get("finish_reason", ""),
+        "truncated": result.get("truncated", False),
         "total_time": result["total_time"],
         "retrieved_sections": result.get("used_sections", result["retrieved_sections"]),
         "candidate_sections": result.get("candidate_sections", result["retrieved_sections"]),
@@ -295,6 +297,8 @@ if user_input:
                 "retrieval_time": result["retrieval_time"],
                 "rerank_time": result["rerank_time"],
                 "generation_time": result["generation_time"],
+                "finish_reason": result.get("finish_reason", ""),
+                "truncated": result.get("truncated", False),
                 "total_time": result["total_time"]
             },
             ensure_ascii=False
