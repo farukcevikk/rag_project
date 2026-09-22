@@ -1,23 +1,28 @@
-# Confidential local manuals and derived retrieval indexes
+# Private Toyota source material and all indexes derived from it.
 data/
-data/user_manuel_dev.md
-data/user_manuel_dev.pdf
-data/ui-user-guide.md
 app/chroma_db/
-*.pkl
-*.onnx
-
-# Private evaluation and runtime output
-evaluation/
 log/
-jetson_env/
-*.jsonl
-*.xlsx
-*.csv
-*.png
-*.svg
-*.pdf
 
-# Local Python/runtime artifacts
+# Local environments, model caches, credentials, and generated files.
+.venv/
+jetson_env/
+.cache/
+.streamlit/secrets.toml
+app/.streamlit/secrets.toml
 __pycache__/
 *.py[cod]
+*.pkl
+*.sqlite3
+*.bin
+*.engine
+*.gguf
+*.safetensors
+*.pt
+*.pth
+*.onnx
+*.pdf
+*.jsonl
+*.log
+.env
+.env.*
+!.env.example

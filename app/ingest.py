@@ -35,8 +35,10 @@ BM25_PATH = DATA_DIR / "bm25_index.pkl"
 SOURCE_PATHS = (
     DATA_DIR / "user_manuel_dev.md",
     DATA_DIR / "ui-user-guide.md",
+    DATA_DIR / "part_creation_bc_table_v2.tr.md",
+    DATA_DIR / "part_creation_bc_table_v2.en.md",
 )
-INDEX_SCHEMA_VERSION = 1
+INDEX_SCHEMA_VERSION = 2
 MAX_EMBEDDING_ATTEMPTS = 3
 
 
@@ -51,6 +53,11 @@ def source_sha256(path):
 def split_source(path):
     """Create parent documents while keeping all paths independent of cwd."""
     markdown_text = path.read_text(encoding="utf-8")
+    language = (
+        "tr"
+        if any(character in markdown_text for character in "çğıöşüÇĞİÖŞÜ")
+        else "en"
+    )
     headers_to_split_on = [
         ("#", "Ana_Baslik"),
         ("##", "Alt_Baslik"),
@@ -69,6 +76,7 @@ def split_source(path):
     )
     for document in documents:
         document.metadata["Source_File"] = path.name
+        document.metadata["Language"] = language
     return documents
 
 
@@ -162,6 +170,7 @@ def ingest_data():
         all_parent_documents.extend(documents)
         source_stats.append({
             "source_file": path.name,
+            "language": documents[0].metadata.get("Language") if documents else None,
             "sha256": source_sha256(path),
             "parent_count": len(documents),
         })

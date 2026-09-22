@@ -1,0 +1,6 @@
+[server]
+# Streamlit's module watcher probes Transformers lazy modules after each run.
+# That probe imports unrelated vision processors and prints false [ERROR]
+# auto-docstring diagnostics. This deployed Jetson app does not need source
+# hot-reload; browser interactions and widget-triggered reruns remain enabled.
+fileWatcherType = "none"

@@ -1,144 +1,61 @@
-# Toyota RAG Asistanı
+# 1pilot — Streamlit RAG
 
-Jetson AGX Orin üzerinde, Toyota 1PAVI kullanım kılavuzlarından yanıt üreten yerel bir RAG uygulamasıdır. Sistem verileri dış servislere göndermeden Ollama, Chroma, BM25 ve cross-encoder reranking bileşenleriyle çalışır.
+1pilot, 1PAVI kılavuzları için yerel çalışan bir soru-cevap uygulamasıdır. Streamlit arayüzü; Chroma vektör araması ve BM25'i birleştirir, adayları BGE reranker ile sıralar ve yanıtı yerel Ollama modeliyle üretir. Bu depo **standalone Streamlit sürümünü** içerir; 1PAVI içine gömülen API/Podman servisini içermez.
 
-## Özellikler
+## Depoda neler var?
 
-- Streamlit tabanlı sohbet arayüzü
-- Chroma ile vektör arama ve BM25 ile anahtar kelime araması
-- Reciprocal Rank Fusion ile hibrit retrieval
-- Cross-encoder ile yeniden sıralama
-- Takip soruları için koşullu konuşma bağlamı seçimi
-- Kanıt güvenilirliği kontrolü ve fail-closed yanıt akışı
-- Doğrulanmış indeks manifestosu ile kaynak ve indeks tutarlılığı kontrolü
-- Yerel kullanıcı geri bildirimi ve analitik paneli
-- Jetson GPU çalışma ortamına uygun model warmup akışı
+- `app/main.py`: sohbet arayüzü ve geri bildirim toplama.
+- `app/pages/`: yerel geri bildirim analitiği.
+- `app/rag_pipeline.py`, `app/rag_core/`, `app/rag_policies.py`: RAG akışı.
+- `app/ingest.py`: kılavuzları yerel indekse dönüştürme.
+- `requirements.txt`: mevcut Jetson ortamında doğrulanan Python bağımlılıkları.
 
-## Mimari
-
-```text
-Yerel kılavuzlar
-       |
-       v
-app/ingest.py --> Chroma + BM25 + parent store + index manifest
-       |
-       v
-Kullanıcı sorusu --> koşullu takip çözümleme
-       |
-       v
-Vektör arama + BM25 --> hibrit sıralama --> cross-encoder reranking
-       |
-       v
-Kanıt güvenilirliği kapısı --> Ollama --> doğrulanmış kaynaklı yanıt
-```
-
-## Dizin yapısı
-
-```text
-app/
-  ingest.py                         Yerel kılavuzlardan indeks üretimi
-  main.py                           Streamlit uygulama giriş noktası
-  rag_pipeline.py                  Retrieval ve yanıt üretim pipeline'ı
-  pages/                            Streamlit analitik paneli
-tests/                              Çekirdek birim testleri
-```
-
-Kılavuzlar, indeksler, loglar, benchmark sonuçları, sanal ortam ve model binary'leri Git deposuna dahil edilmez. Bu dosyalar `.gitignore` ile yerel tutulur.
+Şirket kılavuzları, bunlardan türetilen Chroma/BM25/parent indeksleri, model ağırlıkları, konuşma kayıtları ve kullanıcı geri bildirimleri **bu depoda yoktur**. Bunları GitHub'a eklemeyin.
 
 ## Gereksinimler
 
-- Python 3.10 veya üzeri
-- NVIDIA Jetson AGX Orin ve CUDA destekli PyTorch kurulumu
-- Ollama
-- `bge-m3:latest` embedding modeli
-- Kullanılacak üretim modellerinden en az biri: `llama3.1`, `qwen3:8b`, `gpt-oss:20b`, `qwen2.5:3b` veya `gemma3:12b`
-- Hugging Face üzerinden indirilebilen `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` modeli
+- Python 3.10+; Jetson'da CUDA uyumlu NVIDIA PyTorch kurulmuş bir Python ortamı.
+- Çalışan bir yerel Ollama sunucusu (`http://localhost:11434`).
+- Ollama'da `gpt-oss:20b` ve `bge-m3:latest` modelleri (`ollama list` ile kontrol edin).
+- BGE reranker ağırlıklarına yerel erişim: `BAAI/bge-reranker-v2-m3`. İlk indirme için ağ gerekebilir; çevrimdışı ortamda Hugging Face önbelleğini önceden hazırlayın.
 
-Python paketleri:
+Jetson'da genel amaçlı `torch` paketini körlemesine kurmayın; cihazın JetPack/CUDA sürümüne uygun PyTorch ortamını kullanın. Bağımlılıkları bu ortam aktifken yükleyin:
+
+```bash
+python3 -m pip install -r requirements.txt
+```
+
+## Özel kılavuzları yerelde hazırlama
+
+`app/ingest.py` şu dosyaları **yerel** `data/` klasöründe bekler:
 
 ```text
-numpy
-ollama
-onnxruntime
-pandas
-sentence-transformers
-streamlit
-langchain-community
-langchain-core
-langchain-text-splitters
-rank-bm25
+data/user_manuel_dev.md
+data/ui-user-guide.md
+data/part_creation_bc_table_v2.tr.md
+data/part_creation_bc_table_v2.en.md
 ```
 
-Jetson kurulumlarında PyTorch ve CUDA uyumlu paketler sistemin CUDA sürümüne göre kurulmalıdır.
+Bu dosyaları yalnızca şirketin onayladığı güvenli kanaldan alın. Kılavuz kümesi değişirse `app/ingest.py` içindeki `SOURCE_PATHS` listesini yerel ortamınıza göre güncelleyin ve indeksi yeniden oluşturun. Kaynaklarla indeksin hash'leri eşleşmezse uygulama güvenli biçimde açılmaz; yalnız indeks dosyalarını başka cihazdan kopyalamak yeterli değildir.
 
-## Yerel kurulum
+## İndeks oluşturma ve çalıştırma
 
-1. Ollama servisini başlatın ve gerekli modelleri indirin:
-
-   ```bash
-   ollama serve
-   ollama pull bge-m3:latest
-   ollama pull qwen2.5:3b
-   ```
-
-2. Gizli kılavuz dosyalarını yerel olarak aşağıdaki konumlara koyun:
-
-   ```text
-   data/user_manuel_dev.md
-   data/ui-user-guide.md
-   ```
-
-   Kılavuz içeriklerini GitHub'a veya başka bir dış servise yüklemeyin.
-
-3. Proje sanal ortamını etkinleştirip Python paketlerini kurun:
-
-   ```bash
-   source .venv/bin/activate
-   pip install numpy ollama onnxruntime pandas sentence-transformers streamlit \
-     langchain-community langchain-core langchain-text-splitters rank-bm25
-   ```
-
-4. Yerel retrieval indekslerini oluşturun:
-
-   ```bash
-   python app/ingest.py
-   ```
-
-   Bu işlem `app/chroma_db/`, `data/parent_store.pkl`, `data/bm25_index.pkl` ve `data/index_manifest.json` üretir. Üretilen dosyalar yerel çalışma verisidir.
-
-## Uygulamayı çalıştırma
+Depo kökünde, Ollama ve yukarıdaki modeller hazırken:
 
 ```bash
-streamlit run app/main.py
+python3 app/ingest.py
+python3 -m streamlit run app/main.py
 ```
 
-Ollama varsayılan olarak `http://localhost:11434` adresinde çalışmalıdır. Model seçimi uygulamanın sidebar bölümünden yapılır.
+İlk açılışta embedding, reranker ve yanıt modeli belleğe yüklendiği için bekleme olabilir. Tarayıcı adresini Streamlit terminal çıktısından alın. Arayüzde başka bir model seçerseniz o modelin de Ollama'da kurulu olması gerekir.
 
-## Testler
+İndeksleme, `app/chroma_db/` ile `data/index_manifest.json`, `data/parent_store.pkl` ve `data/bm25_index.pkl` üretir. Sohbet ve geri bildirimler `log/` altında yalnız yerel olarak tutulur. Bu üç dizin `.gitignore` kapsamındadır.
 
-Çekirdek testleri çalıştırmak için:
+## Sorun giderme
 
-```bash
-python -m unittest tests.test_condense_question \
-  tests.test_index_manifest \
-  tests.test_reranker_selection
-```
+- **Eksik kılavuz:** Dört kaynak dosyasının adlarını ve `data/` konumunu kontrol edin.
+- **İndeks uyuşmazlığı:** Kılavuzları ve indeksi aynı sürümde tutun; gerekirse `python3 app/ingest.py` ile yeniden oluşturun.
+- **Model bulunamadı/bağlantı yok:** `ollama list` ve Ollama servis durumunu kontrol edin.
+- **CUDA/PyTorch hatası:** Jetson'a uygun PyTorch kurulumunu ve GPU sürücüsünü doğrulayın. Sadece konteynerin veya web arayüzünün sağlıklı görünmesi gerçek model çıkarımını doğrulamaz.
 
-Sözdizimi kontrolü:
-
-```bash
-python -m compileall -q app tests
-```
-
-Testlerin import edilebilmesi için Python bağımlılıklarının kurulmuş olması gerekir. Ollama servisi, gerçek kılavuz dosyaları veya üretilmiş indeksler test çalıştırmak için zorunlu değildir.
-
-## Gizlilik ve güvenlik
-
-- Kılavuz içerikleri yalnızca yerel retrieval kaynağı olarak kullanılır.
-- Kullanıcı soruları ve geri bildirimler yerel `log/` klasörüne yazılır.
-- `data/`, `evaluation/`, `log/`, `jetson_env/`, `app/chroma_db/` ve model dosyaları Git'e gönderilmemelidir.
-- Paylaşım öncesinde staged dosya listesini kontrol edin:
-
-  ```bash
-  git diff --cached --name-only
-  ```
+Bu kod ve kılavuzlarla üretilen yanıtlar, üretim hattındaki kararların yerine geçmez; kaynakları ve iş kurallarını ayrıca doğrulayın.
